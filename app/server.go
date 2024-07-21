@@ -20,18 +20,22 @@ func main() {
 		fmt.Println("Error accepting connection: ", err.Error())
 		os.Exit(1)
 	}
-	defer conn.Close()
 
 	handleConnection(conn)
 }
 
+// handleConnection reads the request from the connection,
+// routes the request, and writes the response back to the connection
 func handleConnection(conn net.Conn) {
+	defer conn.Close()
+
 	req := make([]byte, 1024)
 	n, err := conn.Read(req)
 	if err != nil {
-		os.Exit(1)
+		fmt.Println("Error reading connection: ", err.Error())
+		return
 	}
-	fmt.Println("get request, read ", n, " bytes")
+	fmt.Println("Recieve request, read ", n, " bytes")
 	fmt.Println(string(req))
 
 	reqURL := getRequestURL(req)
@@ -39,43 +43,48 @@ func handleConnection(conn net.Conn) {
 	n, err = routeRequest(conn, reqURL)
 	if err != nil {
 		fmt.Println("Error writing connection: ", err.Error())
-		os.Exit(1)
+		return
 	}
-	fmt.Println("send response back, wrote ", n, " bytes")
+	fmt.Println("Send response back, wrote ", n, " bytes")
 }
 
-func routeRequest(conn net.Conn, reqURL string) (n int, err error) {
+// routeRequest routes the request to the corresponding handler based on the request URL
+func routeRequest(conn net.Conn, reqURL string) (int, error) {
+	var response []byte
+
 	if isRootEndpoint(reqURL) {
 		fmt.Println("Request URL: /, sending 200 OK")
-		n, err = conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+		response = []byte("HTTP/1.1 200 OK\r\n\r\n")
 	} else if isEchoEndpoint(reqURL) {
 		fmt.Println("Request URL: /echo, sending 200 OK, and echoing back msg")
 
 		msg := getEchoMsg(reqURL)
-		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(msg), msg)
-		n, err = conn.Write(buf.Bytes())
+		response = []byte(fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(msg), msg))
 	} else {
 		fmt.Println("Request URL: ", reqURL, " sending 404 Not Found")
-		n, err = conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+		response = []byte("HTTP/1.1 404 Not Found\r\n\r\n")
 	}
 
-	return
+	return conn.Write(response)
 }
 
+// isRootEndpoint checks if the request URL is the root endpoint
 func isRootEndpoint(url string) bool {
 	return url == "/"
 }
 
+// isEchoEndpoint checks if the request URL is the echo endpoint
 func isEchoEndpoint(url string) bool {
-	urlComponents := strings.Split(url, "/")
-	return urlComponents[1] == "echo"
+	return strings.HasPrefix(url, "/echo/")
 }
 
+// getEchoMsg returns the message to be echoed back for the echo endpoint
 func getEchoMsg(url string) string {
-	return url[6:]
+	prefixLen := len("/echo/")
+	return url[prefixLen:]
 }
 
+// getRequestURL parses the request URL from the request
 func getRequestURL(req []byte) string {
 	// request line \r\n headers \r\n request body \r\n
 	requestLine := bytes.Split(req, []byte("\r\n"))[0]
