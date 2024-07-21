@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strings"
 )
 
 func main() {
@@ -38,9 +37,7 @@ func handleConnection(conn net.Conn) {
 	fmt.Println("Recieve request, read ", n, " bytes")
 	fmt.Println(string(req))
 
-	reqURL := getRequestURL(req)
-
-	n, err = routeRequest(conn, reqURL)
+	n, err = routeRequest(conn, req)
 	if err != nil {
 		fmt.Println("Error writing connection: ", err.Error())
 		return
@@ -49,9 +46,10 @@ func handleConnection(conn net.Conn) {
 }
 
 // routeRequest routes the request to the corresponding handler based on the request URL
-func routeRequest(conn net.Conn, reqURL string) (int, error) {
+func routeRequest(conn net.Conn, req []byte) (int, error) {
 	var response []byte
 
+	reqURL := getRequestURL(req)
 	if isRootEndpoint(reqURL) {
 		fmt.Println("Request URL: /, sending 200 OK")
 		response = []byte("HTTP/1.1 200 OK\r\n\r\n")
@@ -60,6 +58,9 @@ func routeRequest(conn net.Conn, reqURL string) (int, error) {
 
 		msg := getEchoMsg(reqURL)
 		response = []byte(fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(msg), msg))
+	} else if isUserAgentEndpoint(reqURL) {
+		userAgent := getHeader(req, []byte("User-Agent"))
+		response = []byte(fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(userAgent), userAgent))
 	} else {
 		fmt.Println("Request URL: ", reqURL, " sending 404 Not Found")
 		response = []byte("HTTP/1.1 404 Not Found\r\n\r\n")
@@ -68,27 +69,47 @@ func routeRequest(conn net.Conn, reqURL string) (int, error) {
 	return conn.Write(response)
 }
 
-// isRootEndpoint checks if the request URL is the root endpoint
-func isRootEndpoint(url string) bool {
-	return url == "/"
+// isRootEndpoint checks if the request URL is to the root endpoint
+func isRootEndpoint(url []byte) bool {
+	return bytes.Equal(url, []byte("/"))
 }
 
-// isEchoEndpoint checks if the request URL is the echo endpoint
-func isEchoEndpoint(url string) bool {
-	return strings.HasPrefix(url, "/echo/")
+// isEchoEndpoint checks if the request URL is to the echo endpoint
+func isEchoEndpoint(url []byte) bool {
+	return bytes.HasPrefix(url, []byte("/echo/"))
+}
+
+// isUserAgentEndpoint checks if the request URL is to the user-agent endpoint
+func isUserAgentEndpoint(url []byte) bool {
+	return bytes.HasPrefix(url, []byte("/user-agent"))
 }
 
 // getEchoMsg returns the message to be echoed back for the echo endpoint
-func getEchoMsg(url string) string {
+func getEchoMsg(url []byte) string {
 	prefixLen := len("/echo/")
-	return url[prefixLen:]
+	return string(url[prefixLen:])
+}
+
+// getHeader returns the value of the header with the given key
+func getHeader(req []byte, headerKey []byte) string {
+	headerKey = append(headerKey, []byte(": ")...)
+	headers := bytes.Split(req, []byte("\r\n"))
+	// Skip the request line and the request body
+	for i := 1; i < len(headers) && !bytes.Equal(headers[i], []byte("")); i++ {
+		hk := headers[i]
+		if bytes.HasPrefix(hk, headerKey) {
+			return string(bytes.Split(hk, []byte(": "))[1])
+		}
+	}
+
+	return ""
 }
 
 // getRequestURL parses the request URL from the request
-func getRequestURL(req []byte) string {
+func getRequestURL(req []byte) []byte {
 	// request line \r\n headers \r\n request body \r\n
 	requestLine := bytes.Split(req, []byte("\r\n"))[0]
 	reqURLByte := bytes.Split(requestLine, []byte(" "))[1]
 	fmt.Println("Request URL: ", string(reqURLByte), " len: ", len(reqURLByte))
-	return string(reqURLByte)
+	return reqURLByte
 }
