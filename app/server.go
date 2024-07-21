@@ -7,6 +7,57 @@ import (
 	"os"
 )
 
+type HTTPRequest struct {
+	Method  []byte
+	URL     []byte
+	Headers map[string]string
+	Body    []byte
+}
+
+type HTTPResponse struct {
+	Status  int
+	Headers map[string]string
+	Body    []byte
+}
+
+func NewHTTPResponse() *HTTPResponse {
+	return &HTTPResponse{
+		Status:  200,
+		Headers: make(map[string]string),
+	}
+}
+
+func (resp *HTTPResponse) addCode(code int) {
+	resp.Status = code
+}
+
+func (resp *HTTPResponse) addHeader(key string, value string) {
+	resp.Headers[key] = value
+}
+
+func (resp *HTTPResponse) addHeaders(headers map[string]string) {
+	for k, v := range headers {
+		resp.addHeader(k, v)
+	}
+}
+
+func (resp *HTTPResponse) addContent(content []byte) {
+	resp.Body = content
+}
+
+func (resp *HTTPResponse) toBytes() []byte {
+	var buffer bytes.Buffer
+
+	buffer.WriteString(fmt.Sprintf("HTTP/1.1 %d %s\r\n", resp.Status, httpStatusText(resp.Status)))
+	for key, value := range resp.Headers {
+		buffer.WriteString(fmt.Sprintf("%s: %s\r\n", key, value))
+	}
+	buffer.WriteString("\r\n")
+	buffer.Write(resp.Body)
+
+	return buffer.Bytes()
+}
+
 func main() {
 	l, err := net.Listen("tcp", "0.0.0.0:4221")
 	if err != nil {
@@ -30,15 +81,17 @@ func main() {
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	req := make([]byte, 1024)
-	n, err := conn.Read(req)
+	// TODO: read request data from connection gracefully
+	rawRequest := make([]byte, 1024)
+	n, err := conn.Read(rawRequest)
 	if err != nil {
 		fmt.Println("Error reading connection: ", err.Error())
 		return
 	}
 	fmt.Println("Recieve request, read ", n, " bytes")
-	fmt.Println(string(req))
+	fmt.Println(string(rawRequest))
 
+	req := parseRequest(rawRequest)
 	n, err = routeRequest(conn, req)
 	if err != nil {
 		fmt.Println("Error writing connection: ", err.Error())
@@ -48,35 +101,95 @@ func handleConnection(conn net.Conn) {
 }
 
 // routeRequest routes the request to the corresponding handler based on the request URL
-func routeRequest(conn net.Conn, req []byte) (int, error) {
-	var response []byte
+func routeRequest(conn net.Conn, req HTTPRequest) (int, error) {
+	var response HTTPResponse
 
-	reqURL := getRequestURL(req)
+	reqURL := req.URL
 	if isRootEndpoint(reqURL) {
-		fmt.Println("Request URL: /, sending 200 OK")
-		response = []byte("HTTP/1.1 200 OK\r\n\r\n")
+		response.addCode(200)
 	} else if isEchoEndpoint(reqURL) {
-		fmt.Println("Request URL: /echo, sending 200 OK, and echoing back msg")
-
 		msg := getEchoMsg(reqURL)
-		response = []byte(fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(msg), msg))
+		response.addHeaders(map[string]string{
+			"Content-Type":   "text/plain",
+			"Content-Length": fmt.Sprintf("%d", len(msg)),
+		})
+		response.addContent(msg)
 	} else if isUserAgentEndpoint(reqURL) {
-		userAgent := getHeader(req, []byte("User-Agent"))
-		response = []byte(fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(userAgent), userAgent))
+		userAgent := getHeader(req.Headers, "User-Agent")
+		response.addCode(200)
+		response.addHeaders(map[string]string{
+			"Content-Type":   "text/plain",
+			"Content-Length": fmt.Sprintf("%d", len(userAgent)),
+		})
+		response.addContent([]byte(userAgent))
 	} else if isFileEndPoint(reqURL) {
 		filename := getRequestFilename(reqURL)
 		content, err := readFileContent(filename)
 		if err != nil {
-			response = []byte("HTTP/1.1 404 Not Found\r\n\r\n")
+			response.addCode(404)
 		} else {
-			response = []byte(fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n%s", len(content), string(content)))
+			response.addCode(200)
+			response.addHeaders(map[string]string{
+				"Content-Type":   "application/octet-stream",
+				"Content-Length": fmt.Sprintf("%d", len(content)),
+			})
+			response.addContent(content)
 		}
 	} else {
-		fmt.Println("Request URL: ", reqURL, " sending 404 Not Found")
-		response = []byte("HTTP/1.1 404 Not Found\r\n\r\n")
+		response.addCode(404)
 	}
 
-	return conn.Write(response)
+	return conn.Write(response.toBytes())
+}
+
+// parseRequest parses the raw request into an HTTPRequest struct
+func parseRequest(rawRequest []byte) HTTPRequest {
+	// Split the raw request into request line, headers, and body
+	requestLine, headers, body := splitRequest(rawRequest)
+
+	// Parse the request line
+	method, url := parseRequestLine(requestLine)
+
+	// Parse the headers
+	headerMap := parseHeaders(headers)
+
+	return HTTPRequest{
+		Method:  method,
+		URL:     url,
+		Headers: headerMap,
+		Body:    body,
+	}
+}
+
+// TODO: check requestHeaders
+func splitRequest(rawRequest []byte) (requestLine []byte, requestHeaders [][]byte, requestBody []byte) {
+	requestComponents := bytes.Split(rawRequest, []byte("\r\n"))
+	requestLine = requestComponents[0]
+	requestBody = requestComponents[len(requestComponents)-1]
+	requestHeaders = requestComponents[1 : len(requestComponents)-2]
+
+	return
+}
+
+// parseRequestLine parses the request line into the method and URL
+func parseRequestLine(requestLine []byte) ([]byte, []byte) {
+	requestLineComponents := bytes.Split(requestLine, []byte(" "))
+	method := requestLineComponents[0]
+	url := requestLineComponents[1]
+
+	return method, url
+}
+
+// parseHeaders parses the headers into a map
+func parseHeaders(headers [][]byte) map[string]string {
+	headerMap := make(map[string]string)
+
+	for _, header := range headers {
+		headerComponents := bytes.Split(header, []byte(": "))
+		headerMap[string(headerComponents[0])] = string(headerComponents[1])
+	}
+
+	return headerMap
 }
 
 // isRootEndpoint checks if the request URL is to the root endpoint
@@ -100,20 +213,16 @@ func isFileEndPoint(url []byte) bool {
 }
 
 // getEchoMsg returns the message to be echoed back for the echo endpoint
-func getEchoMsg(url []byte) string {
+func getEchoMsg(url []byte) []byte {
 	prefixLen := len("/echo/")
-	return string(url[prefixLen:])
+	return url[prefixLen:]
 }
 
 // getHeader returns the value of the header with the given key
-func getHeader(req []byte, headerKey []byte) string {
-	headerKey = append(headerKey, []byte(": ")...)
-	headers := bytes.Split(req, []byte("\r\n"))
-	// Skip the request line and the request body
-	for i := 1; i < len(headers) && !bytes.Equal(headers[i], []byte("")); i++ {
-		hk := headers[i]
-		if bytes.HasPrefix(hk, headerKey) {
-			return string(bytes.Split(hk, []byte(": "))[1])
+func getHeader(reqHeaders map[string]string, headerKey string) string {
+	for key, value := range reqHeaders {
+		if key == headerKey {
+			return value
 		}
 	}
 
@@ -134,11 +243,13 @@ func readFileContent(filename string) ([]byte, error) {
 	return os.ReadFile(filePath)
 }
 
-// getRequestURL parses the request URL from the request
-func getRequestURL(req []byte) []byte {
-	// request line \r\n headers \r\n request body \r\n
-	requestLine := bytes.Split(req, []byte("\r\n"))[0]
-	reqURLByte := bytes.Split(requestLine, []byte(" "))[1]
-	fmt.Println("Request URL: ", string(reqURLByte), " len: ", len(reqURLByte))
-	return reqURLByte
+func httpStatusText(code int) string {
+	switch code {
+	case 200:
+		return "OK"
+	case 404:
+		return "Not Found"
+	default:
+		return "Internal Server Error"
+	}
 }
