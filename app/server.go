@@ -63,6 +63,14 @@ func routeRequest(conn net.Conn, req []byte) (int, error) {
 	} else if isUserAgentEndpoint(reqURL) {
 		userAgent := getHeader(req, []byte("User-Agent"))
 		response = []byte(fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", len(userAgent), userAgent))
+	} else if isFileEndPoint(reqURL) {
+		filename := getRequestFilename(reqURL)
+		content, err := readFileContent(filename)
+		if err != nil {
+			response = []byte("HTTP/1.1 404 Not Found\r\n\r\n")
+		} else {
+			response = []byte(fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n%s", len(content), string(content)))
+		}
 	} else {
 		fmt.Println("Request URL: ", reqURL, " sending 404 Not Found")
 		response = []byte("HTTP/1.1 404 Not Found\r\n\r\n")
@@ -86,6 +94,11 @@ func isUserAgentEndpoint(url []byte) bool {
 	return bytes.HasPrefix(url, []byte("/user-agent"))
 }
 
+// isFileEndPoint checks if the request URL is to the file endpoint
+func isFileEndPoint(url []byte) bool {
+	return bytes.HasPrefix(url, []byte("/files"))
+}
+
 // getEchoMsg returns the message to be echoed back for the echo endpoint
 func getEchoMsg(url []byte) string {
 	prefixLen := len("/echo/")
@@ -105,6 +118,20 @@ func getHeader(req []byte, headerKey []byte) string {
 	}
 
 	return ""
+}
+
+// getRequestFilename returns the filename from the request URL
+func getRequestFilename(url []byte) string {
+	prefixLen := len("/files/")
+	return string(url[prefixLen:])
+}
+
+// readFileContent reads the content of the file with the given filename in /tmp/
+func readFileContent(filename string) ([]byte, error) {
+	basePath := os.Args[2]
+	filePath := basePath + filename
+	fmt.Println("Reading file: ", filePath)
+	return os.ReadFile(filePath)
 }
 
 // getRequestURL parses the request URL from the request
