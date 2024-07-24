@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 )
 
 // handleRootEndpoint handles the root endpoint
@@ -63,12 +62,12 @@ func handleFileEndpointGET(req *HTTPRequest, resp *HTTPResponse) (err error) {
 	filename := getRequestFilename(req.URL)
 	content, err := readFileContent(filename)
 	if err != nil {
-		if err == os.ErrNotExist {
-			fmt.Printf("Error file not found: %v\n", err)
-			resp.setCode(HTTP_CODE_NOT_FOUND)
-		}
-		fmt.Printf("Error reading file: %v\n", err)
-		resp.setCode(HTTP_CODE_INTERNAL_SERVER_ERROR)
+		// if err == os.ErrNotExist {
+		fmt.Printf("Error file not found: %v\n", err)
+		resp.setCode(HTTP_CODE_NOT_FOUND)
+		// }
+		// fmt.Printf("Error reading file: %v\n", err)
+		// resp.setCode(HTTP_CODE_INTERNAL_SERVER_ERROR)
 	} else {
 		resp.setCode(HTTP_CODE_OK)
 		resp.addHeaders(map[string]string{

@@ -10,7 +10,7 @@ var FileBasePath string
 // readFileContent reads the content of the file with the given filename in FileBasePath
 func readFileContent(filename string) ([]byte, error) {
 	filePath := FileBasePath + filename
-	fmt.Println("Reading file: ", filePath)
+	fmt.Println("Trying to read file: ", filePath)
 	return os.ReadFile(filePath)
 }
 
@@ -18,7 +18,7 @@ func readFileContent(filename string) ([]byte, error) {
 // creating the file if it does not exist
 func writeFileContent(filename string, content []byte) error {
 	filePath := FileBasePath + filename
-	fmt.Println("Writing file: ", filePath)
+	fmt.Println("Trying to write file: ", filePath)
 
 	// each number of the permission is a bit, so 0644 is 110 100 100 in binary
 	// the first 1 is for the file type, the next 3 bits are for the owner's permission,
