@@ -42,13 +42,7 @@ type HTTPRequest struct {
 
 // getHeader returns the value of the header with the given key
 func (req *HTTPRequest) getHeader(headerKey string) string {
-	for key, value := range req.Headers {
-		if key == headerKey {
-			return value
-		}
-	}
-
-	return ""
+	return req.Headers[headerKey]
 }
 
 type HTTPResponse struct {
@@ -86,11 +80,27 @@ func (resp *HTTPResponse) setContent(content []byte) {
 func (resp *HTTPResponse) toBytes() []byte {
 	var buffer bytes.Buffer
 
+	// check if the response body should be compressed
+	if resp.Headers["Content-Encoding"] == "gzip" {
+		compressedBodyBytes, err := gzipCompress(resp.Body)
+		if err != nil {
+			fmt.Printf("Error compressing content: %v\n", err)
+		} else {
+			resp.setContent(compressedBodyBytes)
+			resp.addHeader("Content-Length", fmt.Sprintf("%d", len(compressedBodyBytes)))
+		}
+	}
+
+	// write status line
 	buffer.WriteString(fmt.Sprintf("HTTP/1.1 %d %s\r\n", resp.Status, HTTPCode2StatusText(resp.Status)))
+
+	// write headers
 	for key, value := range resp.Headers {
 		buffer.WriteString(fmt.Sprintf("%s: %s\r\n", key, value))
 	}
 	buffer.WriteString("\r\n")
+
+	// write body
 	buffer.Write(resp.Body)
 
 	return buffer.Bytes()
