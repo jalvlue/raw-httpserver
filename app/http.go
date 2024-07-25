@@ -143,10 +143,12 @@ func parseRequest(rawRequest []byte) *HTTPRequest {
 
 // splitRequest splits the raw request into request line, headers, and body
 func splitRequest(rawRequest []byte) (requestLine []byte, requestHeaders [][]byte, requestBody []byte) {
-	requestComponents := bytes.Split(rawRequest, []byte("\r\n"))
-	requestLine = requestComponents[0]
-	requestBody = requestComponents[len(requestComponents)-1]
-	requestHeaders = requestComponents[1 : len(requestComponents)-2]
+	requestComponents := bytes.Split(rawRequest, []byte("\r\n\r\n"))
+	requestBody = requestComponents[1]
+
+	requestLineAndHeaders := bytes.Split(requestComponents[0], []byte("\r\n"))
+	requestLine = requestLineAndHeaders[0]
+	requestHeaders = requestLineAndHeaders[1:]
 
 	return
 }

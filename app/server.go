@@ -7,7 +7,11 @@ import (
 )
 
 func init() {
-	FileBasePath = os.Args[2]
+	if len(os.Args) == 3 {
+		FileBasePath = os.Args[2]
+	} else {
+		FileBasePath = "/tmp/files/"
+	}
 }
 
 func main() {
@@ -44,12 +48,7 @@ func handleConnection(conn net.Conn) {
 	fmt.Println(string(rawRequest))
 
 	req := parseRequest(rawRequest)
-	resp, err := routeAndHandleRequest(req)
-	if err != nil {
-		fmt.Println("Error handling connection: ", err.Error())
-		return
-	}
-
+	resp := routeAndHandleRequest(req)
 	n, err := conn.Write(resp.toBytes())
 	if err != nil {
 		fmt.Println("Error writing connection: ", err.Error())

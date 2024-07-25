@@ -5,27 +5,27 @@ import (
 )
 
 // routeAndHandleRequest routes the request to the corresponding handler based on the request URL
-func routeAndHandleRequest(req *HTTPRequest) (response *HTTPResponse, err error) {
-	response = &HTTPResponse{
+func routeAndHandleRequest(req *HTTPRequest) *HTTPResponse {
+	response := &HTTPResponse{
+		Status:  HTTP_CODE_OK,
 		Headers: make(map[string]string),
+		Body:    make([]byte, 0),
 	}
 
-	// TODO: route the request to the corresponding handler gracefully
 	reqURL := req.URL
 	if isRootEndpoint(reqURL) {
-		err = handleRootEndpoint(response)
-		// err = handleRootEndpoint(req, response)
+		handleRootEndpoint(response)
 	} else if isEchoEndpoint(reqURL) {
-		err = handleEchoEndpoint(req, response)
+		handleEchoEndpoint(req, response)
 	} else if isUserAgentEndpoint(reqURL) {
-		err = handleUserAgentEndpoint(req, response)
+		handleUserAgentEndpoint(req, response)
 	} else if isFileEndPoint(reqURL) {
-		err = handleFileEndpoint(req, response)
+		handleFileEndpoint(req, response)
 	} else {
-		err = handleNotFoundEndpoint(response)
+		handleNotFoundEndpoint(response)
 	}
 
-	return
+	return response
 }
 
 // isRootEndpoint checks if the request URL is to the root endpoint
