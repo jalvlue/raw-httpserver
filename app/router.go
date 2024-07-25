@@ -25,6 +25,10 @@ func routeAndHandleRequest(req *HTTPRequest) *HTTPResponse {
 		handleNotFoundEndpoint(response)
 	}
 
+	if req.getHeader("Accept-Encoding") == "gzip" {
+		response.addHeader("Content-Encoding", "gzip")
+	}
+
 	return response
 }
 
