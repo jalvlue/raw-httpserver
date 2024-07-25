@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"strings"
 )
 
 // routeAndHandleRequest routes the request to the corresponding handler based on the request URL
@@ -25,7 +26,7 @@ func routeAndHandleRequest(req *HTTPRequest) *HTTPResponse {
 		handleNotFoundEndpoint(response)
 	}
 
-	if req.getHeader("Accept-Encoding") == "gzip" {
+	if isGZIPCompress(req) {
 		response.addHeader("Content-Encoding", "gzip")
 	}
 
@@ -50,4 +51,16 @@ func isUserAgentEndpoint(url []byte) bool {
 // isFileEndPoint checks if the request URL is to the file endpoint
 func isFileEndPoint(url []byte) bool {
 	return bytes.HasPrefix(url, []byte("/files"))
+}
+
+// isGZIPCompress checks if the request accepts gzip compression
+func isGZIPCompress(req *HTTPRequest) bool {
+	ae := req.getHeader("Accept-Encoding")
+	compressFormats := strings.Split(ae, ", ")
+	for _, format := range compressFormats {
+		if format == "gzip" {
+			return true
+		}
+	}
+	return false
 }
