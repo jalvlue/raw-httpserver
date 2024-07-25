@@ -3,9 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"net"
-	"time"
 )
 
 type HTTPCode int
@@ -100,26 +98,34 @@ func (resp *HTTPResponse) toBytes() []byte {
 
 // readRequest reads the raw request content from the connection
 func readRequest(conn net.Conn) ([]byte, error) {
-	var buffer bytes.Buffer
-	tmp := make([]byte, 256)
-	conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+	// var buffer bytes.Buffer
+	// tmp := make([]byte, 256)
+	// conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 
-	for {
-		n, err := conn.Read(tmp)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			if err, ok := err.(net.Error); ok && err.Timeout() {
-				break
-			}
-			return nil, err
-		}
-		buffer.Write(tmp[:n])
+	// for {
+	// 	n, err := conn.Read(tmp)
+	// 	if err != nil {
+	// 		if err == io.EOF {
+	// 			break
+	// 		}
+	// 		if err, ok := err.(net.Error); ok && err.Timeout() {
+	// 			break
+	// 		}
+	// 		return nil, err
+	// 	}
+	// 	buffer.Write(tmp[:n])
+	// }
+
+	// rawReq := buffer.Bytes()
+	// return rawReq, nil
+
+	buf := make([]byte, 1024)
+	n, err := conn.Read(buf)
+	if err != nil {
+		fmt.Printf("Error reading connection: %v\n", err)
+		return nil, err
 	}
-
-	rawReq := buffer.Bytes()
-	return rawReq, nil
+	return buf[:n], nil
 }
 
 // parseRequest parses the raw request into an HTTPRequest struct
